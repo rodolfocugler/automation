@@ -29,44 +29,8 @@ IRsend irsend(4);
 #define ID_CONTROL "Controle"
 
 /* IR Codes*/
-#define IR_BPLUS 0xF700FF
-#define IR_BMINUS 0xF7807F
-#define IR_OFF 0xF740BF
-#define IR_ON 0xF7C03F
-#define IR_R 0xF720DF
-#define IR_G 0xF7A05F
-#define IR_B 0xF7609F
-#define IR_W 0xF7E01F
-#define IR_B1 0xF710EF
-#define IR_B2 0xF7906F
-#define IR_B3 0xF750AF
-#define IR_FLASH 0xF7D02F
-#define IR_B4 0xF730CF
-#define IR_B5 0xF7B04F
-#define IR_B6 0xF7708F
-#define IR_STROBE 0xF7F00F
-#define IR_B7 0xF708F7
-#define IR_B8 0xF78877
-#define IR_B9 0xF748B7
-#define IR_FADE 0xF7C837
-#define IR_B10 0xF728D7
-#define IR_B11 0xF7A857
-#define IR_B12 0xF76897
-#define IR_SMOOTH 0xF7E817
-
-// SAMSUNG CODES
-#define IR_S_OFF 0xE0E019E6
-#define IR_S_ON 0xE0E09966
-#define IR_S_SOURCE 0xE0E0807F
-#define IR_S_ENTER 0xE0E016E9
-#define IR_S_MENU 0xE0E058A7
-#define IR_S_RETURN 0xE0E01AE5
-#define IR_S_EXIT 0xE0E0B44B
-#define IR_S_UP 0xE0E006F9
-#define IR_S_LEFT 0xE0E0A659
-#define IR_S_DOWN 0xE0E08679
-#define IR_S_RIGHT 0xE0E046B9
-#define IR_S_NETFLIX 0x010FEF
+#include "necCodes.h"
+#include "samsungCodes.h"
 
 uint8_t redLed;
 uint8_t greenLed;
@@ -159,16 +123,16 @@ void setup() {
 
 void triggerControl(bool state, int redLed, int greenLed, int blueLed, int value) {
   if (value == 254) {
-    irsend.sendSAMSUNG(IR_S_ON, 32, 1);
+    irsend.sendSAMSUNG(SAMSUNG_ON, 32, 1);
     turnLedTVOffCounter = 500;
   } else if (value == 251) {
-    irsend.sendSAMSUNG(IR_S_OFF, 32, 1);
+    irsend.sendSAMSUNG(SAMSUNG_OFF, 32, 1);
   } else if (value == 249) {
-    irsend.sendSAMSUNG(IR_S_NETFLIX, 32, 1);
+    irsend.sendSAMSUNG(SAMSUNG_NETFLIX, 32, 1);
   } else if (value == 246) {
-    irsend.sendSAMSUNG(IR_S_EXIT, 32, 1);
+    irsend.sendSAMSUNG(SAMSUNG_EXIT, 32, 1);
   } else if (value == 244) {
-    irsend.sendSAMSUNG(IR_S_ENTER, 32, 1);
+    irsend.sendSAMSUNG(SAMSUNG_MIDDLE, 32, 1);
   }
 }
 
