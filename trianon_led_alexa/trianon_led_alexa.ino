@@ -28,7 +28,9 @@ fauxmoESP fauxmo;
 
 
 #define ID_LED_BED "Led Cama"
+#define LED_BUILTIN 2
 
+bool command = false;
 uint8_t redLed;
 uint8_t greenLed;
 uint8_t blueLed;
@@ -181,7 +183,7 @@ void setup() {
     // State is a boolean (ON/OFF) and value a number from 0 to 255 (if you say "set kitchen light to 50%" you will receive a 128 here).
     // Just remember not to delay too much here, this is a callback, exit as soon as possible.
     // If you have to do something more involved here set a flag and process it in your main loop.
-
+    command = true;
     Serial.printf("[MAIN] Device #%d (%s) state: %s value: %d hue: %u saturation: %u ct: %u\n", device_id, device_name, state ? "ON" : "OFF", value, hue, saturation, ct);
 
     char colormode[3];
@@ -201,6 +203,9 @@ void setup() {
       triggerLedCommand(state, redLed, greenLed, blueLed, value);
     }
   });
+
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
 }
 
 void triggerLedCommand(bool state, int redLed, int greenLed, int blueLed, int value) {
@@ -252,6 +257,13 @@ void loop() {
   if (millis() - last > 5000) {
     last = millis();
     Serial.printf("[MAIN] Free heap: %d bytes\n", ESP.getFreeHeap());
+  }
+
+  if (command) {
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(2000);
+    digitalWrite(LED_BUILTIN, LOW);
+    command = false;
   }
 
   // If your device state is changed by any other means (MQTT, physical button,...)

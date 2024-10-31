@@ -165,7 +165,7 @@ String fauxmoESP::_makeMD5(String text)
   md5.begin();
   md5.add(text);
   md5.calculate();
-  
+
   md5.getBytes(bbuf);
   for (uint8_t i = 0; i < 16; i++)
   {
@@ -213,7 +213,7 @@ bool fauxmoESP::_onTCPList(AsyncClient *client, String url, String body) {
 	// Get the id
 	unsigned char id = url.substring(pos+7).toInt();
 
-	// This will hold the response string	
+	// This will hold the response string
 	String response;
 
 	// Client is requesting all devices
@@ -232,7 +232,7 @@ bool fauxmoESP::_onTCPList(AsyncClient *client, String url, String body) {
 	}
 
 	_sendTCPResponse(client, "200 OK", (char *) response.c_str(), "application/json");
-	
+
 	return true;
 
 }
@@ -328,7 +328,7 @@ bool fauxmoESP::_onTCPControl(AsyncClient *client, String url, String body) {
 	}
 
 	return false;
-	
+
 }
 
 bool fauxmoESP::_onTCPRequest(AsyncClient *client, bool isGet, String url, String body) {
@@ -374,7 +374,7 @@ bool fauxmoESP::_onTCPData(AsyncClient *client, void *data, size_t len) {
 	while (*p != ' ') p++;
 	*p = 0;
 	p++;
-	
+
 	// Split word and flag start of url
 	char * url = p;
 
@@ -459,9 +459,9 @@ void fauxmoESP::_onTCPClient(AsyncClient *client) {
 
 }
 
-void fauxmoESP::_adjustRGBFromValue(unsigned char id) 
+void fauxmoESP::_adjustRGBFromValue(unsigned char id)
 {
-	if (id < 0) 
+	if (id < 0)
 		return;
 
 	// Get the greatest of the RGB values
@@ -483,9 +483,9 @@ void fauxmoESP::_adjustRGBFromValue(unsigned char id)
 	}
 }
 
-void fauxmoESP::_setRGBFromHSV(unsigned char id) 
+void fauxmoESP::_setRGBFromHSV(unsigned char id)
 {
-	if (id < 0) 
+	if (id < 0)
 		return;
 
 	float dh, ds, dv;
@@ -493,7 +493,7 @@ void fauxmoESP::_setRGBFromHSV(unsigned char id)
 	ds = _devices[id].saturation;
 	dv = _devices[id].value / 256.0;
 
-	// lifted from https://github.com/Aircoookie/Espalexa/blob/master/src/EspalexaDevice.cpp    
+	// lifted from https://github.com/Aircoookie/Espalexa/blob/master/src/EspalexaDevice.cpp
 	float h = ((float)dh)/65536.0;
 	float s = ((float)ds)/255.0;
 	byte i = floor(h*6);
@@ -502,32 +502,32 @@ void fauxmoESP::_setRGBFromHSV(unsigned char id)
 	float q = 255 * (1-f*s);
 	float t = 255 * (1-(1-f)*s);
 	switch (i%6) {
-		case 0: 
+		case 0:
 			_devices[id].red = 255;
 			_devices[id].green = t;
 			_devices[id].blue = p;
 			break;
-		case 1: 
+		case 1:
 			_devices[id].red = q;
 			_devices[id].green = 255;
 			_devices[id].blue = p;
 			break;
-		case 2: 
+		case 2:
 			_devices[id].red = p;
 			_devices[id].green = 255;
 			_devices[id].blue = t;
 			break;
-		case 3: 
+		case 3:
 			_devices[id].red = p;
 			_devices[id].green = q;
 			_devices[id].blue = 255;
 			break;
-		case 4: 
+		case 4:
 			_devices[id].red = t;
 			_devices[id].green = p;
 			_devices[id].blue = 255;
 			break;
-		case 5: 
+		case 5:
 			_devices[id].red = 255;
 			_devices[id].green = p;
 			_devices[id].blue = q;
@@ -540,9 +540,9 @@ void fauxmoESP::_setRGBFromHSV(unsigned char id)
 
  }
 
-void fauxmoESP::_setRGBFromCT(unsigned char id) 
+void fauxmoESP::_setRGBFromCT(unsigned char id)
 {
-	if (id < 0) 
+	if (id < 0)
 		return;
 
 	float temp = 10000.0 / _devices[id].ct;
@@ -577,7 +577,7 @@ void fauxmoESP::_setRGBFromCT(unsigned char id)
 	_devices[id].green = g;
 	_devices[id].blue = b;
 
-	//printf("RGB %f %f %f\n", r, g, b);    
+	//printf("RGB %f %f %f\n", r, g, b);
 
 }
 
@@ -586,13 +586,13 @@ void fauxmoESP::_setRGBFromCT(unsigned char id)
 // -----------------------------------------------------------------------------
 
 fauxmoESP::~fauxmoESP() {
-  	
+
 	// Free the name for each device
 	for (auto& device : _devices) {
 		free(device.name);
   	}
-  	
-	// Delete devices  
+
+	// Delete devices
 	_devices.clear();
 
 }
@@ -707,7 +707,7 @@ uint8_t fauxmoESP::getBlue(unsigned char id)
 
 // For hue / Saturation
 bool fauxmoESP::setState(unsigned char id, bool state, unsigned int hue, unsigned int saturation) {
-	if (id < _devices.size()) 
+	if (id < _devices.size())
 	{
 		_devices[id].hue = hue;
 		_devices[id].saturation = saturation;
@@ -718,7 +718,7 @@ bool fauxmoESP::setState(unsigned char id, bool state, unsigned int hue, unsigne
 
 bool fauxmoESP::setState(const char * device_name, bool state, unsigned int hue, unsigned int saturation) {
 	int id = getDeviceId(device_name);
-	if (id < 0) 
+	if (id < 0)
 		return false;
 	_devices[id].hue = hue;
 	_devices[id].saturation = saturation;
@@ -727,7 +727,7 @@ bool fauxmoESP::setState(const char * device_name, bool state, unsigned int hue,
 
 // For Colour Temperature (ct)
 bool fauxmoESP::setState(unsigned char id, bool state, unsigned int ct) {
-	if (id < _devices.size()) 
+	if (id < _devices.size())
 	{
 		_devices[id].ct = ct;
 		_setRGBFromCT(id);

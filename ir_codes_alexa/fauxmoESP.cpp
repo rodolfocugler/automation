@@ -619,7 +619,7 @@ unsigned char fauxmoESP::addDevice(const char * device_name) {
     // create the uniqueid
     String mac = WiFi.macAddress();
 
-    snprintf(device.uniqueid, 27, "%s:%s-%02X", mac.c_str(), "00:00", device_id);
+     snprintf(device.uniqueid, 27, "%02X:%s:AB-%02X", device_id, mac.c_str(), device_id);
 
     // Attach
     _devices.push_back(device);
