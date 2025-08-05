@@ -31,7 +31,7 @@
 #define ID_LED_TV "Led TV"
 #define ID_LED_BED "Led Cama"
 
-const char* LOCALE = "sala";
+const char* LOCALE = "quarto";
 const char* ID = "001";
 
 // ==== Global Variables ====
@@ -41,6 +41,7 @@ IRsend irsend(IR_PIN);
 
 String lastPayload = "";
 unsigned long lastMessageTime = 0;
+unsigned long lastProcessedMessageTime = 0;
 bool messagePending = false;
 
 
@@ -57,6 +58,10 @@ void setup() {
 
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
+
+  if (strcmp("quarto", LOCALE) == 0) {
+    BluLed::setup();
+  }
 
   irsend.begin();
 
@@ -165,6 +170,13 @@ void handleMQTTMessage(const String& payload) {
     Serial.println("Received expired message. Ignoring.");
     return;
   }
+  
+  if (lastProcessedMessageTime == createdAt) {
+    Serial.println("Received duplicated message. Ignoring.");
+    return;
+  }
+
+  lastProcessedMessageTime = createdAt;
 
   // === Process the final valid message ===
   Serial.print("Processing message: ");
@@ -173,17 +185,16 @@ void handleMQTTMessage(const String& payload) {
   const char* device = doc["deviceName"];
   const char* type = doc["type"];
 
-
   if (strcmp(type, TYPE_LED) == 0) {
     bool state = doc["state"];
     JsonArray rgb = doc["rgb_color"];
     int red = rgb[0];
     int green = rgb[1];
     int blue = rgb[2];
-    int value = doc["value"];
+    int value = doc["brightness_pct"];
 
     if (strcmp(device, ID_LED_BED) == 0) {
-      BluLed::triggerLedCommand(state, red, green, blue, value);
+      BluLed::sendRGB(state, red, green, blue, value);
     } else if (strcmp(device, ID_LED_TV) == 0) {
       LedTv::triggerLedTv(state, red, green, blue);
     }
