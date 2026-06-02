@@ -1,21 +1,16 @@
 #include <WiFiManager.h>
 #include <PubSubClient.h>
-#include <IRsend.h>
+#include <IRremote.hpp>
 #include <ArduinoJson.h>
 #include <time.h>
-#include <ir_Samsung.h>
 
 #ifdef ESP32
-#include <IRRemoteESP32.h>
 #include <WiFi.h>
 #else
-#include <IRremoteESP8266.h>
 #include <ESP8266WiFi.h>
 #endif
 
-#include "BluLed.h"
-#include "LedTv.h"
-#include "TvSamsung.h"
+#include "LedBriloner.h"
 #include "Log.h"
 
 // ==== Definitions ====
@@ -24,6 +19,9 @@
 #define IR_PIN 23
 #define MQTT_SERVER "pi-desktop"
 #define MQTT_PORT 1883
+#define uS_TO_S_FACTOR 1000000        // Conversion factor for microseconds
+#define TIME_TO_SLEEP 5               // 5 seconds sleep
+#define IDLE_TIME_BEFORE_SLEEP 60000  // 60 seconds without messages before sleeping (in ms)
 
 #define RESTART_INTERVAL (30 * 60 * 1000UL)  // 30 minutes in ms
 
@@ -35,8 +33,8 @@
 #define ID_LED_BED "Led Cama"
 #define ID_LIVING_ROOM_LIGHT "Luz Sala"
 
-const char* LOCALE = "quarto";
-const char* ID = "001";
+const char* LOCALE = "sala";
+const char* ID = "002";
 
 // ==== Global Variables ====
 WiFiClient espClient;
@@ -240,16 +238,10 @@ void handleMQTTMessage(const String& payload) {
     int blue = rgb[2];
     int value = doc["brightness_pct"];
 
-    if (strcmp(device, ID_LED_BED) == 0) {
-      BluLed::sendRGB(state, red, green, blue, value);
-    } else if (strcmp(device, ID_LED_TV) == 0) {
-      LedTv::triggerLedTv(state, red, green, blue);
+    if (strcmp(device, ID_LIVING_ROOM_LIGHT) == 0) {
+      LedBriloner::triggerLight(state, red, green, blue, value);
     }
-  } else if (strcmp(type, TYPE_TV) == 0) {
-    const char* value = doc["value"];
-    const char* action = doc["action"];
-    TvSamsung::triggerControl(action, value);
-  } else if (strcmp(type, TYPE_FAN) == 0) {
+  }
 
   // Publish last processed message to state topic
   publishLastMessage(payload);

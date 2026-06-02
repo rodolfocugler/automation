@@ -15,6 +15,8 @@
 // edit it according to your router configuration
 #include "credentials.h"
 
+#define LED_BUILTIN 2
+
 fauxmoESP fauxmo;
 
 int turnLedTVOffCounter = 0;

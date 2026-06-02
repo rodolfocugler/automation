@@ -4,7 +4,6 @@
 #include <ir_Samsung.h>
 
 #include "fauxmoESP.h"
-#include "BluLed.h"
 #include "LedTv.h"
 #include "TvSamsung.h"
 
@@ -46,6 +45,7 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 
 void callback(char* topic, byte* payload, unsigned int length) {
+  digitalWrite(LED_BUILTIN, HIGH);
   payload[length] = '\0';
   String message = String((char*)payload);
   Serial.printf("[MQTT] Recebido em %s: %s\n", topic, message.c_str());
@@ -66,28 +66,28 @@ void callback(char* topic, byte* payload, unsigned int length) {
   int green = doc["green"];
   int blue = doc["blue"];
 
-  if (strcmp(device, ID_LED_BED) == 0) {
-    BluLed::triggerLedCommand(state, redLed, greenLed, blueLed, value);
-  } else if (strcmp(device, ID_LED_TV) == 0) {
+  if (strcmp(device, ID_LED_TV) == 0) {
     LedTv::triggerLedTv(state, redLed, greenLed, blueLed);
   } else if (strcmp(device, ID_CONTROL) == 0) {
     TvSamsung::triggerControl(state, redLed, greenLed, blueLed, value);
   }
+  digitalWrite(LED_BUILTIN, LOW);
 }
+
 
 void reconnect() {
   while (!client.connected()) {
     Serial.print("Conectando ao MQTT...");
     String clientId = "ESP32Client-" + String(random(0xffff), HEX);
     if (client.connect(clientId.c_str())) {
-      Serial.println("conectado!");
-      client.subscribe("alexa/quarto/1");
-      client.subscribe("alexa/quarto/all");
+      client.subscribe("alexa/sala/1");
+      client.subscribe("alexa/sala/all");
       client.subscribe("alexa/all");
+      Serial.println("conectado!");
     } else {
       Serial.print("falha, rc=");
       Serial.print(client.state());
-      Serial.println(" tentando em 5 segundos...");
+      Serial.println(" tentando em 2 segundos...");
       delay(2000);
     }
   }
@@ -125,8 +125,6 @@ void setup() {
   wifiSetup();
 
   irsend.begin();
-
-  BluLed::setup();
 
   // By default, fauxmoESP creates it's own webserver on the defined port
   // The TCP port must be 80 for gen3 devices (default is 1901)
@@ -188,8 +186,10 @@ void setup() {
       topic += "quarto/1";
     } else if (strcmp(device_name, ID_LED_TV) == 0) {
       topic += "sala/1";
+      LedTv::triggerLedTv(state, redLed, greenLed, blueLed);
     } else if (strcmp(device_name, ID_CONTROL) == 0) {
       topic += "sala/1";
+    TvSamsung::triggerControl(state, redLed, greenLed, blueLed, value);
     }
 
     if (client.connected()) {

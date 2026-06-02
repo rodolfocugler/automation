@@ -1,16 +1,16 @@
-#ifndef LED_TV_H
-#define LED_TV_H
+#ifndef LAMP_H
+#define LAMP_H
 
 #include <Arduino.h>
 #include <IRsend.h>
-#include "ledCodes.h"
+#include "lampCodes.h"
 #include "Log.h"
 
 extern IRsend irsend;
 
-class LedTv {
+class Lamp {
 public:
-  static void triggerLedTv(bool state, int redLed, int greenLed, int blueLed) {
+  static void trigger(bool state, int redLed, int greenLed, int blueLed, int brightness) {
     if (state) {
       irsend.sendNEC(IR_ON, 32);
       uint64_t code = getClosestIRCode(redLed, greenLed, blueLed);
@@ -43,4 +43,4 @@ private:
   }
 };
 
-#endif  // LED_TV_H
+#endif  // LAMP_H
