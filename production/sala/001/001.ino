@@ -45,7 +45,7 @@ const char* LOCALE = "sala";
 const char* ID = "001";
 
 // ================= OTA CONFIG =================
-#define OTA_BASE_URL "http://pi-desktop:9595/esp32/sala/001"
+#define OTA_BASE_URL "http://pi-desktop:9595"
 #define CURRENT_VERSION "20260602_214237"
 
 // ==== Global Variables ====
@@ -302,11 +302,12 @@ void checkOTA() {
   if (!WiFi.isConnected()) return;
 
   HTTPClient http;
-  String url = String(OTA_BASE_URL) + "/latest.json";
 
 #ifdef ESP8266
+  String url = String(OTA_BASE_URL) + "/esp8266/" + String(LOCALE) + "/" + String(ID) + "/latest.json";
   http.begin(client, url);
 #else
+  String url = String(OTA_BASE_URL) + "/esp32/" + String(LOCALE) + "/" + String(ID) + "/latest.json";
   http.begin(url);
 #endif
 
@@ -339,11 +340,11 @@ void checkOTA() {
 
   Serial.println("OTA: updating firmware...");
 
-  String fwURL = String(OTA_BASE_URL) + "/" + file;
-
 #ifdef ESP8266
+  String fwURL = String(OTA_BASE_URL) + "/esp8266/" + String(LOCALE) + "/" + String(ID) + "/" + file;
   t_httpUpdate_return ret = ESPhttpUpdate.update(client, fwURL);
 #else
+  String fwURL = String(OTA_BASE_URL) + "/esp32/" + String(LOCALE) + "/" + String(ID) + "/" + file;
   t_httpUpdate_return ret = httpUpdate.update(client, fwURL);
 #endif
 
