@@ -6,8 +6,13 @@
 
 #ifdef ESP32
 #include <WiFi.h>
+#include <HTTPClient.h>
+#include <HTTPUpdate.h>
 #else
 #include <ESP8266WiFi.h>
+#include <ESP8266httpUpdate.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClient.h>
 #endif
 
 #include "LedBriloner.h"
@@ -36,6 +41,10 @@
 const char* LOCALE = "sala";
 const char* ID = "002";
 
+// ================= OTA CONFIG =================
+#define OTA_BASE_URL "http://pi-desktop:9595"
+#define CURRENT_VERSION "20260602_214237"
+
 // ==== Global Variables ====
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -47,12 +56,16 @@ bool messagePending = false;
 
 unsigned long bootTime = 0;
 
+unsigned long lastOTACheck = 0;
+const unsigned long OTA_INTERVAL = 30000;
+
 // ==== Function Prototypes ====
 void connectToMQTT();
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 void handleMQTTMessage(const String& payload);
 void publishLastMessage(const String& payload);
 void controlLedByTime(int desiredState);
+void checkOTA();
 
 // ==== Setup ====
 void setup() {
@@ -124,6 +137,12 @@ void loop() {
 
     controlLedByTime(LOW);  // LED indicator OFF after processing
     messagePending = false;
+  }
+  
+  // ===== OTA CHECK =====
+  if (millis() - lastOTACheck > OTA_INTERVAL) {
+    lastOTACheck = millis();
+    checkOTA();
   }
 }
 
@@ -266,5 +285,71 @@ void controlLedByTime(int desiredState) {
     digitalWrite(LED_BUILTIN, HIGH);  // LED off
   } else {
     digitalWrite(LED_BUILTIN, desiredState);
+  }
+}
+
+// ================= OTA CHECK =================
+void checkOTA() {
+  if (!WiFi.isConnected()) return;
+
+  HTTPClient http;
+
+#ifdef ESP8266
+  String url = String(OTA_BASE_URL) + "/esp8266/" + String(LOCALE) + "/" + String(ID) + "/latest.json";
+  http.begin(client, url);
+#else
+  String url = String(OTA_BASE_URL) + "/esp32/" + String(LOCALE) + "/" + String(ID) + "/latest.json";
+  http.begin(url);
+#endif
+
+  int code = http.GET();
+
+  if (code != 200) {
+    Serial.println("OTA: failed to fetch latest.json");
+    http.end();
+    return;
+  }
+
+  String payload = http.getString();
+  http.end();
+
+  StaticJsonDocument<256> doc;
+  if (deserializeJson(doc, payload)) {
+    Serial.println("OTA: JSON error");
+    return;
+  }
+
+  String version = doc["version"];
+  String file = doc["file"];
+
+  Serial.println("Server version: " + version);
+
+  if (version == CURRENT_VERSION) {
+    Serial.println("OTA: already up to date");
+    return;
+  }
+
+  Serial.println("OTA: updating firmware...");
+
+#ifdef ESP8266
+  String fwURL = String(OTA_BASE_URL) + "/esp8266/" + String(LOCALE) + "/" + String(ID) + "/" + file;
+  t_httpUpdate_return ret = ESPhttpUpdate.update(client, fwURL);
+#else
+  String fwURL = String(OTA_BASE_URL) + "/esp32/" + String(LOCALE) + "/" + String(ID) + "/" + file;
+  t_httpUpdate_return ret = httpUpdate.update(client, fwURL);
+#endif
+
+  switch (ret) {
+    case HTTP_UPDATE_FAILED:
+      Serial.println("OTA FAILED");
+      break;
+
+    case HTTP_UPDATE_NO_UPDATES:
+      Serial.println("OTA NO UPDATE");
+      break;
+
+    case HTTP_UPDATE_OK:
+      Serial.println("OTA SUCCESS");
+      break;
   }
 }
