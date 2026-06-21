@@ -250,6 +250,8 @@ void handleMQTTMessage(const String& payload) {
     const char* action = doc["action"];
     TvSamsung::triggerControl(action, value);
   } else if (strcmp(type, TYPE_FAN) == 0) {
+    // Implement fan control if needed
+  }
 
   // Publish last processed message to state topic
   publishLastMessage(payload);

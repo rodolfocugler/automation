@@ -49,6 +49,7 @@ const char* ID = "001";
 #define CURRENT_VERSION "20260602_214237"
 
 // ==== Global Variables ====
+IRsend irsend(IR_PIN);
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
@@ -79,7 +80,7 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
 
-  IrSender.begin(IR_PIN);
+  irsend.begin();
 
   WiFiManager wm;
   wm.setTimeout(15);
@@ -270,6 +271,8 @@ void handleMQTTMessage(const String& payload) {
     const char* action = doc["action"];
     TvSamsung::triggerControl(action, value);
   } else if (strcmp(type, TYPE_FAN) == 0) {
+    // Future fan control logic
+  }
 
   // Publish last processed message to state topic
   publishLastMessage(payload);
@@ -305,7 +308,7 @@ void checkOTA() {
 
 #ifdef ESP8266
   String url = String(OTA_BASE_URL) + "/esp8266/" + String(LOCALE) + "/" + String(ID) + "/latest.json";
-  http.begin(client, url);
+  http.begin(espClient, url);
 #else
   String url = String(OTA_BASE_URL) + "/esp32/" + String(LOCALE) + "/" + String(ID) + "/latest.json";
   http.begin(url);
@@ -342,10 +345,10 @@ void checkOTA() {
 
 #ifdef ESP8266
   String fwURL = String(OTA_BASE_URL) + "/esp8266/" + String(LOCALE) + "/" + String(ID) + "/" + file;
-  t_httpUpdate_return ret = ESPhttpUpdate.update(client, fwURL);
+  t_httpUpdate_return ret = ESPhttpUpdate.update(espClient, fwURL);
 #else
   String fwURL = String(OTA_BASE_URL) + "/esp32/" + String(LOCALE) + "/" + String(ID) + "/" + file;
-  t_httpUpdate_return ret = httpUpdate.update(client, fwURL);
+  t_httpUpdate_return ret = httpUpdate.update(espClient, fwURL);
 #endif
 
   switch (ret) {
