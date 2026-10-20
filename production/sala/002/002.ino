@@ -1,355 +1,221 @@
+/**
+ * sala/002 - Briloner living room light (ESP32 / ESP8266)
+ *
+ * Listens for Alexa commands over MQTT and toggles the Briloner lamp via IR.
+ * The last executed command is stored (retained) in device/<LOCALE>/<ID>, so a
+ * command is never executed twice, even across restarts.
+ *
+ * Boot: WiFi (WiFiManager) -> NTP -> MQTT -> OTA check -> loop.
+ * The board restarts every 30 min, so the OTA check at boot runs every 30 min.
+ *
+ * Logs go to Serial (115200) and to MQTT topic logs/<LOCALE>/<ID> (Grafana).
+ * See README.md for details.
+ */
+
+// Keep IRremote from blinking the onboard LED (also saves flash).
+#define NO_LED_FEEDBACK_CODE
+#include <IRremote.hpp>
 #include <WiFiManager.h>
 #include <PubSubClient.h>
-#include <IRremote.hpp>
 #include <ArduinoJson.h>
 #include <time.h>
 
 #ifdef ESP32
-#include <WiFi.h>
-#include <HTTPClient.h>
-#include <HTTPUpdate.h>
+  #include <HTTPClient.h>
+  #include <HTTPUpdate.h>
+  #define CHIP "esp32"
+  #define IR_PIN 23
+  #define LED_OFF LOW         // devkit onboard LED is active-high
+  #define otaUpdater httpUpdate
 #else
-#include <ESP8266WiFi.h>
-#include <ESP8266httpUpdate.h>
-#include <ESP8266HTTPClient.h>
-#include <WiFiClient.h>
+  #include <ESP8266HTTPClient.h>
+  #include <ESP8266httpUpdate.h>
+  #define CHIP "esp8266"
+  #define IR_PIN 4            // D2; GPIO 2 is the onboard LED
+  #define LED_OFF HIGH        // ESP-12 onboard LED is active-low
+  #define otaUpdater ESPhttpUpdate
 #endif
 
-#include "LedBriloner.h"
-#include "Log.h"
+// ==== Device identity ====
+#define LOCALE "sala"
+#define ID "002"
 
-// ==== Definitions ====
-#define SERIAL_BAUDRATE 115200
-#define LED_BUILTIN 2
-#define IR_PIN 23
+// Injected by Jenkins: -DCURRENT_VERSION="\"<version>\"" (must match latest.json).
+#ifndef CURRENT_VERSION
+  #define CURRENT_VERSION "dev"
+#endif
+
+// ==== Config ====
+#define ONBOARD_LED 2
 #define MQTT_SERVER "pi-desktop"
 #define MQTT_PORT 1883
-#define uS_TO_S_FACTOR 1000000        // Conversion factor for microseconds
-#define TIME_TO_SLEEP 5               // 5 seconds sleep
-#define IDLE_TIME_BEFORE_SLEEP 60000  // 60 seconds without messages before sleeping (in ms)
+#define MQTT_BUFFER 512
+#define OTA_URL "http://pi-desktop:9595/" CHIP "/" LOCALE "/" ID "/"
+#define RESTART_INTERVAL_MS (30UL * 60 * 1000)
+#define MQTT_RETRY_MS 5000
+#define MAX_COMMAND_AGE_S 30
+#define VALID_EPOCH 1700000000   // anything below means NTP has not synced yet
 
-#define RESTART_INTERVAL (30 * 60 * 1000UL)  // 30 minutes in ms
+// ==== Topics (compile-time strings, no heap) ====
+#define TOPIC_STATE "device/" LOCALE "/" ID   // last executed command (retained)
+#define TOPIC_LOGS "logs/" LOCALE "/" ID
+const char* const COMMAND_TOPICS[] = {"alexa/" LOCALE "/" ID, "alexa/" LOCALE "/all", "alexa/all"};
 
-#define TYPE_FAN "fan"
-#define TYPE_LED "led"
-#define TYPE_TV "tv"
+// ==== Briloner IR code (NEC). Single power toggle, the lamp has no discrete on/off.
+// https://github.com/Lucaslhm/Flipper-IRDB/blob/main/LED_Lighting/Briloner/Briloner_leuchten.ir
+#define BRILONER_ADDRESS 0x00
+#define BRILONER_TOGGLE 0x45
 
-#define ID_LED_TV "Led TV"
-#define ID_LED_BED "Led Cama"
-#define ID_LIVING_ROOM_LIGHT "Luz Sala"
+WiFiClient netClient;
+PubSubClient mqtt(netClient);
 
-const char* LOCALE = "sala";
-const char* ID = "002";
+uint32_t lastExecuted = 0;      // createdAt of the last executed command (0 = none)
+unsigned long lastMqttAttempt = 0;
 
-// ================= OTA CONFIG =================
-#define OTA_BASE_URL "http://pi-desktop:9595"
-#define CURRENT_VERSION "20260602_214237"
-
-// ==== Global Variables ====
-WiFiClient espClient;
-PubSubClient mqttClient(espClient);
-
-String lastPayload = "";
-unsigned long lastMessageTime = 0;
-unsigned long lastProcessedMessageTime = 0;
-bool messagePending = false;
-
-unsigned long bootTime = 0;
-
-unsigned long lastOTACheck = 0;
-const unsigned long OTA_INTERVAL = 30000;
-
-// ==== Function Prototypes ====
-void connectToMQTT();
-void mqttCallback(char* topic, byte* payload, unsigned int length);
-void handleMQTTMessage(const String& payload);
-void publishLastMessage(const String& payload);
-void controlLedByTime(int desiredState);
-void checkOTA();
-
-// ==== Setup ====
-void setup() {
-  Log::begin(SERIAL_BAUDRATE, &mqttClient, "logs/" + String(LOCALE) + "/" + ID);
-  Log::println();
-  Log::println();
-
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH);
-
-  IrSender.begin(IR_PIN);
-
-  WiFiManager wm;
-  wm.setTimeout(15);
-  wm.setConfigPortalTimeout(20);
-  if (!wm.autoConnect("ESP-Config", "senha123")) {
-    Log::println("Failed to connect, restarting...");
-    delay(3000);
-    ESP.restart();
-  }
-
-  Log::println("WiFi connected!");
-  Log::print("IP: ");
-  Log::println(WiFi.localIP());
-
-  mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
-  mqttClient.setCallback(mqttCallback);
-
-  // Setup NTP with Germany timezone
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-  setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
-  tzset();
-
-  bootTime = millis();
-
-  connectToMQTT();
+// Log to Serial and, when connected, to MQTT (picked up by Grafana).
+void logf(const char* fmt, ...) {
+  char buf[256];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(buf, sizeof buf, fmt, args);
+  va_end(args);
+  Serial.println(buf);
+  if (mqtt.connected()) mqtt.publish(TOPIC_LOGS, buf);
 }
 
-// ==== Loop ====
-void loop() {
-  if (WiFi.isConnected()) {
-    controlLedByTime(HIGH);  // normally ON when WiFi is connected
-  } else {
-    controlLedByTime(LOW);  // normally OFF when WiFi is disconnected
-    ESP.restart();
-  }
-
-  if (!mqttClient.connected()) {
-    connectToMQTT();
-  }
-
-  mqttClient.loop();
-
-  // Restart every RESTART_INTERVAL
-  if (millis() - bootTime >= RESTART_INTERVAL) {
-    Log::println("Restart interval reached, restarting...");
-    ESP.restart();
-  }
-
-  // Debounce burst messages and process only the last one
-  if (messagePending && (millis() - lastMessageTime > 200)) {
-    controlLedByTime(HIGH);  // LED indicator ON during processing
-
-    if (lastProcessedMessageTime != 0) {
-      handleMQTTMessage(lastPayload);
-    } else {
-      Log::println("Ignoring messages until initial state is loaded.");
-    }
-
-    controlLedByTime(LOW);  // LED indicator OFF after processing
-    messagePending = false;
-  }
-  
-  // ===== OTA CHECK =====
-  if (millis() - lastOTACheck > OTA_INTERVAL) {
-    lastOTACheck = millis();
-    checkOTA();
-  }
+void restart(const char* reason) {
+  logf("Restarting: %s", reason);
+  delay(200);  // let Serial/MQTT flush
+  ESP.restart();
 }
 
-// ==== Connect to MQTT ====
-void connectToMQTT() {
-  while (!mqttClient.connected()) {
-    Log::print("Connecting to MQTT... ");
-    if (mqttClient.connect(ID)) {
-      Log::println("Connected! Subscribed to: ");
-      Log::println((String("alexa/") + LOCALE + "/" + ID).c_str());
-      Log::println((String("alexa/") + LOCALE + "/all").c_str());
-      Log::println("alexa/all");
-      Log::println((String("device/") + LOCALE + "/" + ID).c_str());
-
-      mqttClient.subscribe((String("alexa/") + LOCALE + "/" + ID).c_str());
-      mqttClient.subscribe((String("alexa/") + LOCALE + "/all").c_str());
-      mqttClient.subscribe("alexa/all");
-      mqttClient.subscribe((String("device/") + LOCALE + "/" + ID).c_str());
-    } else {
-      Log::print("Failed, rc=");
-      Log::print(mqttClient.state());
-      Log::println(". Retrying in 3 seconds...");
-      delay(3000);
-    }
-  }
+void toggleBriloner() {
+  IrSender.sendNEC(BRILONER_ADDRESS, BRILONER_TOGGLE, 0);
+  delay(40);
+  IrSender.sendNECRepeat();
+  logf("IR: Briloner toggle sent");
 }
 
-// ==== MQTT Callback ====
-void mqttCallback(char* topic, byte* payload, unsigned int length) {
-  String message = "";
-  for (unsigned int i = 0; i < length; i++) {
-    message += (char)payload[i];
+// Handles both the retained state topic and the command topics.
+void onMessage(char* topic, byte* payload, unsigned int len) {
+  // Copy: the payload lives in PubSubClient's buffer, which publish() reuses.
+  char msg[MQTT_BUFFER];
+  len = min(len, (unsigned int)(sizeof msg - 1));
+  memcpy(msg, payload, len);
+  msg[len] = '\0';
+
+  StaticJsonDocument<384> doc;
+  if (deserializeJson(doc, (const char*)msg)) {
+    logf("Invalid JSON on %s: %s", topic, msg);
+    return;
   }
+  uint32_t createdAt = doc["createdAt"] | 0u;
 
-  String topicStr = String(topic);
-
-  // If it's the state topic and no state is yet loaded, restore it
-  if (topicStr == (String("device/") + LOCALE + "/" + ID) && lastProcessedMessageTime == 0) {
-    Log::println("Restoring last state from retained message...");
-
-    StaticJsonDocument<512> doc;
-    DeserializationError error = deserializeJson(doc, message);
-
-    if (error) {
-      Log::println("Failed to parse JSON");
-      return;
-    }
-
-    if (!doc.containsKey("createdAt")) {
-      Log::println("Missing 'createdAt' field");
-      return;
-    }
-
-    lastMessageTime = doc["createdAt"];
-    lastProcessedMessageTime = lastMessageTime;
+  if (strcmp(topic, TOPIC_STATE) == 0) {
+    if (createdAt > lastExecuted) lastExecuted = createdAt;
+    logf("Last executed command: createdAt=%lu", (unsigned long)lastExecuted);
     return;
   }
 
-  // Store last received payload
-  lastPayload = message;
-  lastMessageTime = millis();
-  messagePending = true;
-  Log::print("Received message: ");
-  Log::println(message);
+  logf("Command on %s: %s", topic, msg);
+  if (!createdAt) {
+    logf("Ignored: missing createdAt");
+    return;
+  }
+  long age = (long)(time(nullptr) - (time_t)createdAt);
+  if (age > MAX_COMMAND_AGE_S) {
+    logf("Ignored: expired (%lds old)", age);
+    return;
+  }
+  if (createdAt <= lastExecuted) {
+    logf("Ignored: already executed");
+    return;
+  }
+  if (strcmp(doc["type"] | "", "led") != 0 || strcmp(doc["deviceName"] | "", "Luz Sala") != 0) {
+    logf("Ignored: not for this device");
+    return;
+  }
+
+  toggleBriloner();
+  lastExecuted = createdAt;
+  if (!mqtt.publish(TOPIC_STATE, msg, true)) logf("Failed to publish state");
 }
 
-// ==== Handle MQTT Payload ====
-void handleMQTTMessage(const String& payload) {
-  StaticJsonDocument<512> doc;
-  DeserializationError error = deserializeJson(doc, payload);
+// Single non-blocking attempt, rate limited.
+void connectMqtt() {
+  if (millis() - lastMqttAttempt < MQTT_RETRY_MS && lastMqttAttempt) return;
+  lastMqttAttempt = millis();
 
-  if (error) {
-    Log::println("Failed to parse JSON");
+  if (!mqtt.connect(LOCALE "-" ID)) {
+    Serial.printf("MQTT connect failed, rc=%d\n", mqtt.state());
     return;
   }
-
-  if (!doc.containsKey("createdAt")) {
-    Log::println("Missing 'createdAt' field");
-    return;
-  }
-
-  long createdAt = doc["createdAt"];
-  time_t now;
-  time(&now);
-
-  // Ignore expired messages
-  if ((now - createdAt) > 30) {
-    Log::println("Received expired message. Ignoring.");
-    return;
-  }
-
-  // Ignore duplicated messages
-  if (lastProcessedMessageTime == createdAt) {
-    Log::println("Received duplicated message. Ignoring.");
-    return;
-  }
-
-  lastProcessedMessageTime = createdAt;
-
-  // Process valid message
-  Log::print("Processing message: ");
-  Log::println(payload);
-
-  const char* device = doc["deviceName"];
-  const char* type = doc["type"];
-
-  if (strcmp(type, TYPE_LED) == 0) {
-    bool state = doc["state"];
-    JsonArray rgb = doc["rgb_color"];
-    int red = rgb[0];
-    int green = rgb[1];
-    int blue = rgb[2];
-    int value = doc["brightness_pct"];
-
-    if (strcmp(device, ID_LIVING_ROOM_LIGHT) == 0) {
-      LedBriloner::triggerLight(state, red, green, blue, value);
-    }
-  }
-
-  // Publish last processed message to state topic
-  publishLastMessage(payload);
+  // Subscribe to the state topic FIRST: the broker sends its retained message
+  // before anything from the command topics, so lastExecuted is known before
+  // any command is evaluated. No retained state = execute any fresh command.
+  mqtt.subscribe(TOPIC_STATE);
+  for (const char* t : COMMAND_TOPICS) mqtt.subscribe(t);
+  logf("MQTT connected, firmware %s, IP %s", CURRENT_VERSION, WiFi.localIP().toString().c_str());
 }
 
-// ==== Publish last processed message ====
-void publishLastMessage(const String& payload) {
-  mqttClient.publish((String("device/") + LOCALE + "/" + ID).c_str(), payload.c_str(), true);
-}
-
-// ==== LED Time Control ====
-void controlLedByTime(int desiredState) {
-  struct tm timeinfo;
-  if (!getLocalTime(&timeinfo)) {
-    digitalWrite(LED_BUILTIN, desiredState);  // fallback if no time available
-    return;
-  }
-  int hour = timeinfo.tm_hour;
-
-  // Quiet hours: LED always OFF between 22h - 9h
-  if (hour >= 22 || hour < 9) {
-    digitalWrite(LED_BUILTIN, HIGH);  // LED off
-  } else {
-    digitalWrite(LED_BUILTIN, desiredState);
-  }
-}
-
-// ================= OTA CHECK =================
-void checkOTA() {
-  if (!WiFi.isConnected()) return;
-
+// Fetch latest.json; flash firmware if its version differs from ours (reboots on success).
+void checkOta() {
+  WiFiClient client;  // separate socket, netClient belongs to MQTT
   HTTPClient http;
-
-#ifdef ESP8266
-  String url = String(OTA_BASE_URL) + "/esp8266/" + String(LOCALE) + "/" + String(ID) + "/latest.json";
-  http.begin(client, url);
-#else
-  String url = String(OTA_BASE_URL) + "/esp32/" + String(LOCALE) + "/" + String(ID) + "/latest.json";
-  http.begin(url);
-#endif
-
+  http.begin(client, OTA_URL "latest.json");
   int code = http.GET();
-
-  if (code != 200) {
-    Serial.println("OTA: failed to fetch latest.json");
+  if (code != HTTP_CODE_OK) {
+    logf("OTA: latest.json HTTP %d", code);
     http.end();
     return;
   }
-
-  String payload = http.getString();
+  StaticJsonDocument<128> doc;
+  DeserializationError err = deserializeJson(doc, http.getString());
   http.end();
-
-  StaticJsonDocument<256> doc;
-  if (deserializeJson(doc, payload)) {
-    Serial.println("OTA: JSON error");
+  if (err) {
+    logf("OTA: invalid latest.json");
     return;
   }
 
-  String version = doc["version"];
-  String file = doc["file"];
-
-  Serial.println("Server version: " + version);
-
-  if (version == CURRENT_VERSION) {
-    Serial.println("OTA: already up to date");
+  const char* version = doc["version"] | "";
+  if (strcmp(version, CURRENT_VERSION) == 0) {
+    logf("OTA: up to date (%s)", version);
     return;
   }
-
-  Serial.println("OTA: updating firmware...");
-
-#ifdef ESP8266
-  String fwURL = String(OTA_BASE_URL) + "/esp8266/" + String(LOCALE) + "/" + String(ID) + "/" + file;
-  t_httpUpdate_return ret = ESPhttpUpdate.update(client, fwURL);
-#else
-  String fwURL = String(OTA_BASE_URL) + "/esp32/" + String(LOCALE) + "/" + String(ID) + "/" + file;
-  t_httpUpdate_return ret = httpUpdate.update(client, fwURL);
-#endif
-
-  switch (ret) {
-    case HTTP_UPDATE_FAILED:
-      Serial.println("OTA FAILED");
-      break;
-
-    case HTTP_UPDATE_NO_UPDATES:
-      Serial.println("OTA NO UPDATE");
-      break;
-
-    case HTTP_UPDATE_OK:
-      Serial.println("OTA SUCCESS");
-      break;
+  logf("OTA: updating %s -> %s", CURRENT_VERSION, version);
+  if (otaUpdater.update(client, String(OTA_URL) + (doc["file"] | "firmware.bin")) == HTTP_UPDATE_FAILED) {
+    Serial.printf("OTA: failed: %s\n", otaUpdater.getLastErrorString().c_str());
   }
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(ONBOARD_LED, OUTPUT);
+  digitalWrite(ONBOARD_LED, LED_OFF);
+  IrSender.begin(IR_PIN);
+  Serial.printf("\nBoot sala/002, firmware %s\n", CURRENT_VERSION);
+
+  WiFiManager wm;
+  wm.setConfigPortalTimeout(180);
+  if (!wm.autoConnect("ESP-Config", "senha123")) restart("WiFi not configured");
+
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");  // UTC is enough: only ages are compared
+  for (int i = 0; time(nullptr) < VALID_EPOCH; i++) {
+    if (i > 60) restart("NTP sync timeout");
+    delay(250);
+  }
+
+  mqtt.setServer(MQTT_SERVER, MQTT_PORT);
+  mqtt.setBufferSize(MQTT_BUFFER);
+  mqtt.setCallback(onMessage);
+  connectMqtt();
+
+  checkOta();
+}
+
+void loop() {
+  if (millis() >= RESTART_INTERVAL_MS) restart("scheduled (30 min)");
+  if (WiFi.status() != WL_CONNECTED) restart("WiFi lost");
+  if (!mqtt.connected()) connectMqtt();
+  mqtt.loop();
 }
