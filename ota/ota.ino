@@ -23,10 +23,10 @@
 
 // ==== Device identity ====
 #ifndef LOCALE
-  #define LOCALE "sala"   // "sala" or "quarto"
+  #define LOCALE "quarto"   // "sala" or "quarto"
 #endif
 #ifndef ID
-  #define ID "002"        // "001", "002", ...
+  #define ID "001"        // "001", "002", ...
 #endif
 
 #define OTA_URL "http://pi-desktop:9595/" CHIP "/" LOCALE "/" ID "/"

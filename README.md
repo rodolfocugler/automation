@@ -30,7 +30,9 @@ SSH: `ssh jenkins-remote@pi-desktop`
 |----------------------|-----------------------|--------------------------|------------------------------|
 | Living room (`sala`) | `production/sala/001` | Samsung TV, TV LED strip | IR on GPIO 23, BLE (Triones) |
 | Living room (`sala`) | `production/sala/002` | Briloner lamp            | IR on GPIO 23                |
-| Bedroom (`quarto`)   | —                     | Triones LED strip        | BLE                          |
+| Bedroom (`quarto`)   | `production/quarto/001` | Triones LED strip (`Led Cama`) | BLE (ESP32 only, `min_spiffs`) |
+
+Where the IR/BLE codes come from and how to find new ones: [CODES.md](CODES.md).
 
 
 ## MQTT contract
