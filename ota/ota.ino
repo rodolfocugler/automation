@@ -1,137 +1,75 @@
-#include <ArduinoJson.h>
+/*
+ * OTA bootstrap: flash this over USB to any ESP32/ESP8266 and it replaces itself
+ * with the latest production firmware for LOCALE/ID from the Pi.
+ *
+ * Set LOCALE and ID below (or pass -DLOCALE="\"quarto\"" -DID="\"001\"" at compile time).
+ * WiFi is configured through the same "ESP-Config" portal as production, so the
+ * saved credentials carry over after the flash.
+ */
 #include <WiFiManager.h>
+#include <ArduinoJson.h>
 
-#ifdef ESP8266
-  #include <ESP8266WiFi.h>
-  #include <ESP8266httpUpdate.h>
-  #include <ESP8266HTTPClient.h>
-  #include <WiFiClient.h>
-  #define LED_PIN LED_BUILTIN
-#else
-  #include <WiFi.h>
+#ifdef ESP32
   #include <HTTPClient.h>
   #include <HTTPUpdate.h>
-  #define LED_PIN 2
-#endif
-
-// ================= OTA CONFIG =================
-#define OTA_BASE_URL "http://pi-desktop:9595/esp32"
-#define CURRENT_VERSION "20260602_214237"
-
-// ================= GLOBAL =================
-WiFiClient client;
-
-unsigned long lastOTACheck = 0;
-const unsigned long OTA_INTERVAL = 30000;
-
-// ================= BLINK =================
-void blinkTask() {
-#ifdef ESP8266
-  digitalWrite(LED_PIN, LOW);
-  delay(300);
-  digitalWrite(LED_PIN, HIGH);
-  delay(300);
+  #define CHIP "esp32"
+  #define otaUpdater httpUpdate
 #else
-  digitalWrite(LED_PIN, HIGH);
-  delay(300);
-  digitalWrite(LED_PIN, LOW);
-  delay(300);
+  #include <ESP8266HTTPClient.h>
+  #include <ESP8266httpUpdate.h>
+  #define CHIP "esp8266"
+  #define otaUpdater ESPhttpUpdate
 #endif
-}
 
-// ================= OTA CHECK =================
-void checkOTA() {
-  if (!WiFi.isConnected()) return;
+// ==== Device identity ====
+#ifndef LOCALE
+  #define LOCALE "sala"   // "sala" or "quarto"
+#endif
+#ifndef ID
+  #define ID "002"        // "001", "002", ...
+#endif
 
+#define OTA_URL "http://pi-desktop:9595/" CHIP "/" LOCALE "/" ID "/"
+#define RETRY_MS 30000
+
+// Fetch latest.json and flash its firmware unconditionally (reboots on success).
+void flashLatest() {
+  WiFiClient client;
   HTTPClient http;
-  String url = String(OTA_BASE_URL) + "/latest.json";
-
-#ifdef ESP8266
-  http.begin(client, url);
-#else
-  http.begin(url);
-#endif
-
+  http.begin(client, OTA_URL "latest.json");
   int code = http.GET();
-
-  if (code != 200) {
-    Serial.println("OTA: failed to fetch latest.json");
+  if (code != HTTP_CODE_OK) {
+    Serial.printf("OTA: %slatest.json HTTP %d\n", OTA_URL, code);
     http.end();
     return;
   }
-
-  String payload = http.getString();
+  StaticJsonDocument<128> doc;
+  DeserializationError err = deserializeJson(doc, http.getString());
   http.end();
-
-  StaticJsonDocument<256> doc;
-  if (deserializeJson(doc, payload)) {
-    Serial.println("OTA: JSON error");
+  if (err) {
+    Serial.println("OTA: invalid latest.json");
     return;
   }
 
-  String version = doc["version"];
-  String file = doc["file"];
-
-  Serial.println("Server version: " + version);
-
-  if (version == CURRENT_VERSION) {
-    Serial.println("OTA: already up to date");
-    return;
-  }
-
-  Serial.println("OTA: updating firmware...");
-
-  String fwURL = String(OTA_BASE_URL) + "/" + file;
-
-#ifdef ESP8266
-  t_httpUpdate_return ret = ESPhttpUpdate.update(client, fwURL);
-#else
-  t_httpUpdate_return ret = httpUpdate.update(client, fwURL);
-#endif
-
-  switch (ret) {
-    case HTTP_UPDATE_FAILED:
-      Serial.println("OTA FAILED");
-      break;
-
-    case HTTP_UPDATE_NO_UPDATES:
-      Serial.println("OTA NO UPDATE");
-      break;
-
-    case HTTP_UPDATE_OK:
-      Serial.println("OTA SUCCESS");
-      break;
+  Serial.printf("OTA: flashing %s\n", doc["version"] | "?");
+  if (otaUpdater.update(client, String(OTA_URL) + (doc["file"] | "firmware.bin")) == HTTP_UPDATE_FAILED) {
+    Serial.printf("OTA: failed: %s\n", otaUpdater.getLastErrorString().c_str());
   }
 }
 
-// ================= SETUP =================
 void setup() {
   Serial.begin(115200);
-
-  pinMode(LED_PIN, OUTPUT);
+  Serial.printf("\nOTA bootstrap for " CHIP "/" LOCALE "/" ID "\n");
 
   WiFiManager wm;
-  wm.setTimeout(60);
-
-  if (!wm.autoConnect("ESP-OTA")) {
-    Serial.println("WiFi failed, restarting...");
-    delay(3000);
+  wm.setConfigPortalTimeout(180);
+  if (!wm.autoConnect("ESP-Config", "senha123")) {
+    Serial.println("WiFi not configured, restarting");
     ESP.restart();
   }
-
-  Serial.println("WiFi connected!");
-  Serial.println(WiFi.localIP());
 }
 
-// ================= LOOP =================
 void loop() {
-
-  // ===== BLINK =====
-  blinkTask();
-
-  // ===== OTA CHECK =====
-  if (millis() - lastOTACheck > OTA_INTERVAL) {
-    lastOTACheck = millis();
-    checkOTA();
-  }
+  flashLatest();
+  delay(RETRY_MS);
 }
