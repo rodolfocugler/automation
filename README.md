@@ -28,7 +28,7 @@ SSH: `ssh jenkins-remote@pi-desktop`
 
 | Room                 | Firmware              | Controls                 | How                          |
 |----------------------|-----------------------|--------------------------|------------------------------|
-| Living room (`sala`) | `production/sala/001` | Samsung TV, TV LED strip | IR on GPIO 23, BLE (Triones) |
+| Living room (`sala`) | `production/sala/001` | Samsung TV, TV LED strip | IR on GPIO 23 |
 | Living room (`sala`) | `production/sala/002` | Briloner lamp            | IR on GPIO 23                |
 | Bedroom (`quarto`)   | `production/quarto/001` | Triones LED strip (`Led Cama`) | BLE (ESP32 only, `min_spiffs`) |
 
