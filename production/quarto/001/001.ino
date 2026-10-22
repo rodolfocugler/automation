@@ -56,7 +56,7 @@ const char* const COMMAND_TOPICS[] = {"alexa/" LOCALE "/" ID, "alexa/" LOCALE "/
 // ==== Triones BLE LED ====
 #define LED_MAC "53:02:02:00:04:BB"
 #define BLE_CONNECT_ATTEMPTS 3
-#define BLE_CONNECT_TIMEOUT_MS 1000
+#define BLE_CONNECT_TIMEOUT_MS 5000   // NimBLE 2.x: ms (1.x took seconds)
 const NimBLEUUID LED_SERVICE("FFD5");
 const NimBLEUUID LED_WRITE_CHAR("FFD9");
 const uint8_t LED_ON_CMD[] = {0xCC, 0x23, 0x33};
@@ -95,7 +95,7 @@ bool connectLed() {
       logf("BLE: connected to " LED_MAC);
       return true;
     }
-    logf("BLE: connect attempt %d failed", i);
+    logf("BLE: connect attempt %d failed, error %d", i, ble->getLastError());
     delay(500);
   }
   return false;
