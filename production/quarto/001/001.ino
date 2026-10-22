@@ -56,7 +56,13 @@ const char* const COMMAND_TOPICS[] = {"alexa/" LOCALE "/" ID, "alexa/" LOCALE "/
 // ==== Triones BLE LED ====
 #define LED_MAC "53:02:02:00:04:BB"
 #define BLE_CONNECT_ATTEMPTS 3
-#define BLE_CONNECT_TIMEOUT_MS 5000   // NimBLE 2.x: ms (1.x took seconds)
+#define BLE_CONNECT_TIMEOUT_MS 10000  // NimBLE 2.x: ms (1.x took seconds)
+#define BLE_RETRY_DELAY_MS 1000
+// Units of 1.25 ms (interval) and 10 ms (supervision): 30-50 ms interval, 6 s
+// supervision timeout, so the slow strip survives Wi-Fi sharing the radio.
+#define BLE_CONN_ITVL_MIN 24
+#define BLE_CONN_ITVL_MAX 40
+#define BLE_SUPERVISION_TIMEOUT 600
 const NimBLEUUID LED_SERVICE("FFD5");
 const NimBLEUUID LED_WRITE_CHAR("FFD9");
 const uint8_t LED_ON_CMD[] = {0xCC, 0x23, 0x33};
@@ -96,7 +102,7 @@ bool connectLed() {
       return true;
     }
     logf("BLE: connect attempt %d failed, error %d", i, ble->getLastError());
-    delay(500);
+    delay(BLE_RETRY_DELAY_MS);
   }
   return false;
 }
@@ -248,6 +254,7 @@ void setup() {
   NimBLEDevice::setPower(ESP_PWR_LVL_P9);  // max TX power
   NimBLEDevice::setMTU(23);                // required by Triones
   ble = NimBLEDevice::createClient();
+  ble->setConnectionParams(BLE_CONN_ITVL_MIN, BLE_CONN_ITVL_MAX, 0, BLE_SUPERVISION_TIMEOUT);
   ble->setConnectTimeout(BLE_CONNECT_TIMEOUT_MS);
   if (!connectLed()) logf("BLE: LED not reachable, will retry on next command");
 }
