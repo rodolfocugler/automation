@@ -248,7 +248,6 @@ void setup() {
   NimBLEDevice::setPower(ESP_PWR_LVL_P9);  // max TX power
   NimBLEDevice::setMTU(23);                // required by Triones
   ble = NimBLEDevice::createClient();
-  ble->setConnectionParams(6, 12, 0, 50);
   ble->setConnectTimeout(BLE_CONNECT_TIMEOUT_MS);
   if (!connectLed()) logf("BLE: LED not reachable, will retry on next command");
 }
