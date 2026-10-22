@@ -35,6 +35,12 @@ stored (retained) in `device/sala/001`. After executing, it is published there.
 
 Unknown actions/values and any other `type`/`deviceName` are ignored (not stored as executed).
 
+`Youtube` is not sent via IR (Samsung has no working IR key for it): the ESP calls the TV's
+REST API, `POST https://192.168.178.47:8002/api/v2/applications/111299001912`. No token or
+pairing is needed, but the TV must be on and keep that IP (reserve it in the router; change
+`TV_HOST` otherwise). If the call fails (TV off), the command is not stored as executed.
+`youtube.py` does the same from a PC (`python youtube.py IP_DA_TV rest`).
+
 ## Hardware
 
 | Chip    | IR LED pin     | Onboard LED              |
@@ -46,8 +52,8 @@ Unknown actions/values and any other `type`/`deviceName` are ignored (not stored
 
 | Board                       | Flash used                     |
 |-----------------------------|--------------------------------|
-| ESP32 (IRremote 4.4.1)      | 1,102,475 / 1,310,720 B (84 %) |
-| ESP8266 generic             | ~347 KB                        |
+| ESP32 (IRremote 4.4.1)      | 1,192,455 / 1,310,720 B (90 %) |
+| ESP8266 generic             | ~448 KB                        |
 
 ## Libraries
 

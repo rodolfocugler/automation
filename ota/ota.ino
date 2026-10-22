@@ -60,6 +60,8 @@ void flashLatest() {
 void setup() {
   Serial.begin(115200);
   Serial.printf("\nOTA bootstrap for " CHIP "/" LOCALE "/" ID "\n");
+  // Must be bigger than the firmware, otherwise the update fails with "Not Enough space".
+  Serial.printf("OTA slot size: %u bytes\n", ESP.getFreeSketchSpace());
 
   WiFiManager wm;
   wm.setConfigPortalTimeout(180);

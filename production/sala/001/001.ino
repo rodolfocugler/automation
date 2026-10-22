@@ -19,6 +19,7 @@
 #include <WiFiManager.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <WiFiClientSecure.h>
 #include <time.h>
 
 #ifdef ESP32
@@ -90,10 +91,14 @@ const LedColor LED_COLORS[] = {
 struct TvKey { const char* value; uint32_t code; };
 const TvKey TV_POWER[] = {{"On", 0xE0E09966}, {"Off", 0xE0E019E6}};
 const TvKey TV_MEDIA[] = {
-  {"Netflix", 0xE0E0CF30}, {"Youtube", 0xE0E00E8C}, {"Exit", 0xE0E0B44B},
+  {"Netflix", 0xE0E0CF30}, {"Exit", 0xE0E0B44B},
   {"Ok", 0xE0E016E9}, {"Play", 0xE0E0E21D}, {"Pause", 0xE0E052AD},
 };
 #define TV_MUTE 0xE0E0F00F
+
+// ==== Samsung TV REST API (Samsung has no working IR key for YouTube) ====
+#define TV_HOST "192.168.178.47"   // reserve this IP for the TV in the router
+#define TV_APP_YOUTUBE "111299001912"
 
 WiFiClient netClient;
 PubSubClient mqtt(netClient);
@@ -163,8 +168,21 @@ bool sendTvKey(const TvKey (&keys)[N], const char* value) {
   return false;
 }
 
-// Returns false if the action/value is unknown (nothing sent).
+// Opens an app via the TV's REST API. No token needed; fails if the TV is off.
+bool launchTvApp(const char* appId) {
+  WiFiClientSecure client;
+  client.setInsecure();  // TV uses a self-signed certificate
+  HTTPClient http;
+  http.begin(client, String("https://" TV_HOST ":8002/api/v2/applications/") + appId);
+  int code = http.POST("");
+  http.end();
+  logf("REST: TV app %s HTTP %d", appId, code);
+  return code == HTTP_CODE_OK;
+}
+
+// Returns false if the action/value is unknown or the TV did not accept it.
 bool controlTv(const char* action, const char* value) {
+  if (strcmp(action, "mediaControl") == 0 && strcmp(value, "Youtube") == 0) return launchTvApp(TV_APP_YOUTUBE);
   bool sent = false;
   if (strcmp(action, "setPowerState") == 0) sent = sendTvKey(TV_POWER, value);
   else if (strcmp(action, "mediaControl") == 0) sent = sendTvKey(TV_MEDIA, value);
