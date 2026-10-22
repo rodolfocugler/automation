@@ -1,8 +1,7 @@
 /**
  * sala/002 - Briloner living room light (ESP32 / ESP8266)
  *
- * Listens for Alexa commands over MQTT and toggles the Briloner lamp via IR,
- * or sets its colour temperature (warm/cold) when color_temp_kelvin is sent.
+ * Listens for Alexa commands over MQTT and toggles the Briloner lamp via IR.
  * The last executed command is stored (retained) in device/<LOCALE>/<ID>, so a
  * command is never executed twice, even across restarts.
  *
@@ -66,10 +65,6 @@ const char* const COMMAND_TOPICS[] = {"alexa/" LOCALE "/" ID, "alexa/" LOCALE "/
 // https://github.com/Lucaslhm/Flipper-IRDB/blob/main/LED_Lighting/Briloner/Briloner_leuchten.ir
 #define BRILONER_ADDRESS 0x00
 #define BRILONER_TOGGLE 0x45
-// Colour temperature, from Briloner_Leuchten_LED.ir in the same Flipper-IRDB folder (see CODES.md).
-#define BRILONER_COLD 0x07
-#define BRILONER_WARM 0x09
-#define WARM_BELOW_KELVIN 4000   // color_temp_kelvin below this = warm, else cold
 
 WiFiClient netClient;
 PubSubClient mqtt(netClient);
@@ -94,11 +89,11 @@ void restart(const char* reason) {
   ESP.restart();
 }
 
-void sendBriloner(uint8_t command, const char* name) {
-  IrSender.sendNEC(BRILONER_ADDRESS, command, 0);
+void toggleBriloner() {
+  IrSender.sendNEC(BRILONER_ADDRESS, BRILONER_TOGGLE, 0);
   delay(40);
   IrSender.sendNECRepeat();
-  logf("IR: Briloner %s sent", name);
+  logf("IR: Briloner toggle sent");
 }
 
 // Handles both the retained state topic and the command topics.
@@ -141,11 +136,7 @@ void onMessage(char* topic, byte* payload, unsigned int len) {
     return;
   }
 
-  // A colour temperature command only changes the colour, it doesn't toggle power.
-  uint16_t kelvin = doc["color_temp_kelvin"] | 0;
-  if (!kelvin) sendBriloner(BRILONER_TOGGLE, "toggle");
-  else if (kelvin < WARM_BELOW_KELVIN) sendBriloner(BRILONER_WARM, "warm");
-  else sendBriloner(BRILONER_COLD, "cold");
+  toggleBriloner();
   lastExecuted = createdAt;
   if (!mqtt.publish(TOPIC_STATE, msg, true)) logf("Failed to publish state");
 }

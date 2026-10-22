@@ -39,16 +39,6 @@ topics, so the broker always delivers the retained state first.
 > The Briloner remote has a single power **toggle** code (NEC `0x00/0x45`), so `state` is
 > not used: every accepted command toggles the light.
 
-Colour temperature: add `color_temp_kelvin` and the command sets the colour instead of
-toggling (below 4000 K → WARM `0x09`, otherwise COLD `0x07`):
-
-```json
-{ "type": "led", "deviceName": "Luz Sala", "color_temp_kelvin": 2700, "createdAt": 1760000000 }
-```
-
-The WARM/COLD codes come from the Flipper-IRDB database and are untested, see
-[CODES.md](../../../CODES.md#briloner). Node-RED must send `color_temp_kelvin` for this to work.
-
 ## Hardware
 
 | Chip    | IR LED pin     | Onboard LED              |
