@@ -163,7 +163,7 @@ All colour keys are used in production; Bright±, Flash, Strobe, Fade, Smooth ar
 
 Flipper format: the **first byte** of `address` and `command` is the value; the rest is padding.
 
-Production sends only `0x45` (+ an NEC repeat 40 ms later) and treats it as a **toggle**.
+Production sends `0x45` (+ an NEC repeat 40 ms later) as a **toggle**, and COLD `0x07` / WARM `0x09` (table below) for `color_temp_kelvin`.
 `0x47` (OFF) has never been tried here; if it works, the lamp could get discrete on/off.
 
 ### Other Briloner remotes in Flipper-IRDB (address `0x00`, untested)
