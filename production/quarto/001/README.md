@@ -11,7 +11,7 @@ brightness) when Alexa asks. It does nothing else.
    runs every 30 min too.
 
 The BLE connection is opened at boot and reopened on demand when a command arrives
-(3 attempts). If the strip can't be reached, the command is **not** stored, so it is not
+(3 attempts; inside each one NimBLE retries error 574 / HCI `0x3E` up to 7 times). If the strip can't be reached, the command is **not** stored, so it is not
 marked as executed.
 
 ### Topics

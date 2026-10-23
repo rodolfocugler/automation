@@ -58,10 +58,14 @@ const char* const COMMAND_TOPICS[] = {"alexa/" LOCALE "/" ID, "alexa/" LOCALE "/
 #define BLE_CONNECT_ATTEMPTS 3
 #define BLE_CONNECT_TIMEOUT_MS 10000  // NimBLE 2.x: ms (1.x took seconds)
 #define BLE_RETRY_DELAY_MS 1000
-// Units of 1.25 ms (interval) and 10 ms (supervision): 30-50 ms interval, 6 s
-// supervision timeout, so the slow strip survives Wi-Fi sharing the radio.
-#define BLE_CONN_ITVL_MIN 24
-#define BLE_CONN_ITVL_MAX 40
+// Error 574 (HCI 0x3E, connection failed to be established): the strip missed the
+// first packets of the new link. NimBLE retries it inside connect() (default 2, max 7).
+#define BLE_CONN_FAIL_RETRIES 7
+// Units of 1.25 ms (interval) and 10 ms (supervision): 75-100 ms interval, 6 s
+// supervision timeout, so the slow strip survives Wi-Fi sharing the radio. A new
+// link fails (574) if no packet arrives within 6 intervals, so longer = more slack.
+#define BLE_CONN_ITVL_MIN 60
+#define BLE_CONN_ITVL_MAX 80
 #define BLE_SUPERVISION_TIMEOUT 600
 const NimBLEUUID LED_SERVICE("FFD5");
 const NimBLEUUID LED_WRITE_CHAR("FFD9");
@@ -256,6 +260,7 @@ void setup() {
   ble = NimBLEDevice::createClient();
   ble->setConnectionParams(BLE_CONN_ITVL_MIN, BLE_CONN_ITVL_MAX, 0, BLE_SUPERVISION_TIMEOUT);
   ble->setConnectTimeout(BLE_CONNECT_TIMEOUT_MS);
+  ble->setConnectRetries(BLE_CONN_FAIL_RETRIES);
   if (!connectLed()) logf("BLE: LED not reachable, will retry on next command");
 }
 
