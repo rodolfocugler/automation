@@ -58,6 +58,8 @@ const char* const COMMAND_TOPICS[] = {"alexa/" LOCALE "/" ID, "alexa/" LOCALE "/
 #define BLE_CONNECT_ATTEMPTS 3
 #define BLE_CONNECT_TIMEOUT_MS 10000  // NimBLE 2.x: ms (1.x took seconds)
 #define BLE_RETRY_DELAY_MS 1000
+#define BLE_IDLE_RETRY_MS 15000       // loop (non-blocking, millis): reconnect while idle, so a command finds the link up
+#define MQTT_KEEPALIVE_S 60           // a blocking BLE connect must not drop MQTT (default 15 s)
 // Error 574 (HCI 0x3E, connection failed to be established): the strip missed the
 // first packets of the new link. NimBLE retries it inside connect() (default 2, max 7).
 #define BLE_CONN_FAIL_RETRIES 7
@@ -79,6 +81,7 @@ NimBLEClient* ble = nullptr;
 
 uint32_t lastExecuted = 0;      // createdAt of the last executed command (0 = none)
 unsigned long lastMqttAttempt = 0;
+unsigned long lastBleAttempt = 0;
 
 // Log to Serial and, when connected, to MQTT (picked up by Grafana).
 void logf(const char* fmt, ...) {
@@ -97,15 +100,20 @@ void restart(const char* reason) {
   ESP.restart();
 }
 
+bool connectLedOnce() {
+  if (ble->connect(NimBLEAddress(LED_MAC, BLE_ADDR_PUBLIC))) {
+    logf("BLE: connected to " LED_MAC);
+    return true;
+  }
+  logf("BLE: connect failed, error %d", ble->getLastError());
+  return false;
+}
+
 // The strip drops idle connections, so reconnect on demand.
 bool connectLed() {
   if (ble->isConnected()) return true;
   for (int i = 1; i <= BLE_CONNECT_ATTEMPTS; i++) {
-    if (ble->connect(NimBLEAddress(LED_MAC, BLE_ADDR_PUBLIC))) {
-      logf("BLE: connected to " LED_MAC);
-      return true;
-    }
-    logf("BLE: connect attempt %d failed, error %d", i, ble->getLastError());
+    if (connectLedOnce()) return true;
     delay(BLE_RETRY_DELAY_MS);
   }
   return false;
@@ -249,6 +257,7 @@ void setup() {
 
   mqtt.setServer(MQTT_SERVER, MQTT_PORT);
   mqtt.setBufferSize(MQTT_BUFFER);
+  mqtt.setKeepAlive(MQTT_KEEPALIVE_S);
   mqtt.setCallback(onMessage);
   connectMqtt();
 
@@ -261,7 +270,6 @@ void setup() {
   ble->setConnectionParams(BLE_CONN_ITVL_MIN, BLE_CONN_ITVL_MAX, 0, BLE_SUPERVISION_TIMEOUT);
   ble->setConnectTimeout(BLE_CONNECT_TIMEOUT_MS);
   ble->setConnectRetries(BLE_CONN_FAIL_RETRIES);
-  if (!connectLed()) logf("BLE: LED not reachable, will retry on next command");
 }
 
 void loop() {
@@ -269,4 +277,9 @@ void loop() {
   if (WiFi.status() != WL_CONNECTED) restart("WiFi lost");
   if (!mqtt.connected()) connectMqtt();
   mqtt.loop();
+  // Keep trying while no command is pending, so the link is already up when one arrives.
+  if (!ble->isConnected() && millis() - lastBleAttempt >= BLE_IDLE_RETRY_MS) {
+    connectLedOnce();
+    lastBleAttempt = millis();
+  }
 }

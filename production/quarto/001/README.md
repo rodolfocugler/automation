@@ -6,12 +6,13 @@ brightness) when Alexa asks. It does nothing else.
 ## How it works
 
 1. **Boot**: onboard LED off → Wi-Fi (WiFiManager) → NTP → MQTT → OTA check → BLE → loop.
-2. **Loop**: handles MQTT messages, reconnects MQTT if needed.
+2. **Loop**: handles MQTT messages, reconnects MQTT if needed, reconnects BLE if down.
 3. **Restart**: every 30 min, and when Wi-Fi drops. The OTA check runs at boot, so it
    runs every 30 min too.
 
-The BLE connection is opened at boot and reopened on demand when a command arrives
-(3 attempts; inside each one NimBLE retries error 574 / HCI `0x3E` up to 7 times). If the strip can't be reached, the command is **not** stored, so it is not
+While idle, the loop keeps trying to open the BLE connection (every 15 s, without blocking, starting at boot)
+so the link is already up when a command arrives. If it is still down then, the command
+reconnects on demand (3 attempts; inside each one NimBLE retries error 574 / HCI `0x3E` up to 7 times). If the strip can't be reached, the command is **not** stored, so it is not
 marked as executed.
 
 ### Topics
