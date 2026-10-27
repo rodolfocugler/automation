@@ -55,20 +55,18 @@ const char* const COMMAND_TOPICS[] = {"alexa/" LOCALE "/" ID, "alexa/" LOCALE "/
 
 // ==== Triones BLE LED ====
 #define LED_MAC "53:02:02:00:04:BB"
-#define BLE_CONNECT_ATTEMPTS 3
-#define BLE_CONNECT_TIMEOUT_MS 10000  // NimBLE 2.x: ms (1.x took seconds)
-#define BLE_RETRY_DELAY_MS 1000
+// NimBLE-Arduino 1.x (1.4.x): same API and timings as the old trianon_led_alexa
+// firmware, which connected reliably to this strip (2.x kept failing with error 574).
+#define BLE_CONNECT_ATTEMPTS 10
+#define BLE_CONNECT_TIMEOUT_S 5       // NimBLE 1.x: seconds (2.x takes ms)
+#define BLE_RETRY_DELAY_MS 500
 #define BLE_IDLE_RETRY_MS 15000       // loop (non-blocking, millis): reconnect while idle, so a command finds the link up
-#define MQTT_KEEPALIVE_S 60           // a blocking BLE connect must not drop MQTT (default 15 s)
-// Error 574 (HCI 0x3E, connection failed to be established): the strip missed the
-// first packets of the new link. NimBLE retries it inside connect() (default 2, max 7).
-#define BLE_CONN_FAIL_RETRIES 7
-// Units of 1.25 ms (interval) and 10 ms (supervision): 75-100 ms interval, 6 s
-// supervision timeout, so the slow strip survives Wi-Fi sharing the radio. A new
-// link fails (574) if no packet arrives within 6 intervals, so longer = more slack.
-#define BLE_CONN_ITVL_MIN 60
-#define BLE_CONN_ITVL_MAX 80
-#define BLE_SUPERVISION_TIMEOUT 600
+#define MQTT_KEEPALIVE_S 90           // a blocking BLE connect must not drop MQTT (default 15 s)
+// Units of 1.25 ms (interval) and 10 ms (supervision): fixed 8.75 ms interval, 2 s
+// supervision timeout, as in the old firmware.
+#define BLE_CONN_ITVL_MIN 7
+#define BLE_CONN_ITVL_MAX 7
+#define BLE_SUPERVISION_TIMEOUT 200
 const NimBLEUUID LED_SERVICE("FFD5");
 const NimBLEUUID LED_WRITE_CHAR("FFD9");
 const uint8_t LED_ON_CMD[] = {0xCC, 0x23, 0x33};
@@ -101,7 +99,8 @@ void restart(const char* reason) {
 }
 
 bool connectLedOnce() {
-  if (ble->connect(NimBLEAddress(LED_MAC, BLE_ADDR_PUBLIC))) {
+  // false: keep the discovered services, so a reconnect skips discovery.
+  if (ble->connect(NimBLEAddress(LED_MAC), false)) {
     logf("BLE: connected to " LED_MAC);
     return true;
   }
@@ -263,13 +262,13 @@ void setup() {
 
   checkOta();  // before BLE: the BLE stack takes RAM the update needs
 
+  NimBLEDevice::setScanDuplicateCacheSize(10);
   NimBLEDevice::init("");
   NimBLEDevice::setPower(ESP_PWR_LVL_P9);  // max TX power
   NimBLEDevice::setMTU(23);                // required by Triones
   ble = NimBLEDevice::createClient();
   ble->setConnectionParams(BLE_CONN_ITVL_MIN, BLE_CONN_ITVL_MAX, 0, BLE_SUPERVISION_TIMEOUT);
-  ble->setConnectTimeout(BLE_CONNECT_TIMEOUT_MS);
-  ble->setConnectRetries(BLE_CONN_FAIL_RETRIES);
+  ble->setConnectTimeout(BLE_CONNECT_TIMEOUT_S);
 }
 
 void loop() {

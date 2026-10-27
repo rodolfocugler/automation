@@ -12,7 +12,7 @@ brightness) when Alexa asks. It does nothing else.
 
 While idle, the loop keeps trying to open the BLE connection (every 15 s, without blocking, starting at boot)
 so the link is already up when a command arrives. If it is still down then, the command
-reconnects on demand (3 attempts; inside each one NimBLE retries error 574 / HCI `0x3E` up to 7 times). If the strip can't be reached, the command is **not** stored, so it is not
+reconnects on demand (up to 10 attempts, 5 s each, 500 ms apart, fixed 8.75 ms connection interval, like the old `trianon_led_alexa` firmware). If the strip can't be reached, the command is **not** stored, so it is not
 marked as executed.
 
 ### Topics
@@ -81,7 +81,7 @@ before BLE starts, so the update has the RAM it needs.
 - WiFiManager (tzapu) 2.x
 - PubSubClient 2.8
 - ArduinoJson 6 or 7
-- NimBLE-Arduino **2.x** (tested with 2.5.0)
+- NimBLE-Arduino **1.4.x** (1.x API, as the old `trianon_led_alexa` firmware; 2.x kept failing with BLE error 574). Install with `arduino-cli lib install "NimBLE-Arduino@1.4.3"`
 
 ## First setup
 
