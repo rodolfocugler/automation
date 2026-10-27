@@ -83,6 +83,12 @@ At boot the device fetches `http://pi-desktop:9595/esp32/quarto/001/latest.json`
 `version` differs from `CURRENT_VERSION`, it flashes `file` and reboots. The check runs
 before BLE starts, so the update has the RAM it needs.
 
+## Core
+
+arduino-esp32 **2.0.17** (`arduino-cli core install esp32:esp32@2.0.17`). NimBLE-Arduino
+1.4.3 does not work on core 3.x: `NimBLEDevice::init()` spins forever waiting for host/controller
+sync (log stops at `BLE: starting`) and the whole board stops (no MQTT, no Wi-Fi).
+
 ## Libraries
 
 - WiFiManager (tzapu) 2.x
