@@ -5,15 +5,22 @@ brightness) when Alexa asks. It does nothing else.
 
 ## How it works
 
-1. **Boot**: onboard LED off → Wi-Fi (WiFiManager) → NTP → MQTT → OTA check → BLE → loop.
-2. **Loop**: handles MQTT messages, reconnects MQTT if needed, reconnects BLE if down.
-3. **Restart**: every 30 min, and when Wi-Fi drops. The OTA check runs at boot, so it
+1. **Boot**: onboard LED off → Wi-Fi (WiFiManager) → NTP → MQTT → OTA check → BLE task → loop.
+2. **Loop** (Arduino task): MQTT only. Reconnects MQTT if needed, validates commands and
+   queues them for the BLE task, publishes the BLE task's logs and results.
+3. **BLE task** (FreeRTOS): owns NimBLE (init, connect, write). Its blocking calls never
+   stall MQTT, and MQTT never stalls BLE. Only the loop touches PubSubClient (not
+   thread-safe), so the BLE task hands its logs and results back through queues.
+4. **Restart**: every 30 min, and when Wi-Fi drops. The OTA check runs at boot, so it
    runs every 30 min too.
 
-While idle, the loop keeps trying to open the BLE connection (every 15 s, without blocking, starting at boot)
+While idle, the BLE task keeps trying to open the BLE connection (every 15 s, starting at boot)
 so the link is already up when a command arrives. If it is still down then, the command
 reconnects on demand (up to 10 attempts, 5 s each, 500 ms apart, fixed 8.75 ms connection interval, like the old `trianon_led_alexa` firmware). If the strip can't be reached, the command is **not** stored, so it is not
-marked as executed.
+marked as executed. A newer command replaces one still waiting for the BLE task.
+
+The BLE task logs `BLE: starting` and `BLE: ready` around the NimBLE init, so a hang there
+shows up in Grafana while MQTT keeps working.
 
 ### Topics
 
