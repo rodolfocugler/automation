@@ -85,6 +85,8 @@ If the ESP32 image ever outgrows the slot, use the `min_spiffs` partition scheme
 
 ## Libraries
 
+Run `./setup.sh` to install arduino-cli, the cores and every library at the right version.
+
 - WiFiManager (tzapu) 2.x
 - PubSubClient 2.8
 - ArduinoJson 6 or 7

@@ -22,6 +22,9 @@
   #error "quarto/001 needs BLE: build for ESP32 (esp32:esp32:esp32)"
 #endif
 
+// NimBLE-Arduino works here ONLY on version 1.4.3, and 1.4.3 needs arduino-esp32
+// core 2.0.17 (esp32:esp32@2.0.17). On core 3.x NimBLEDevice::init() hangs forever
+// and the whole board stops. Run setup.sh to install the right versions.
 #include <NimBLEDevice.h>
 #include <WiFiManager.h>
 #include <PubSubClient.h>
@@ -65,7 +68,7 @@ const char* const COMMAND_TOPICS[] = {"alexa/" LOCALE "/" ID, "alexa/" LOCALE "/
 
 // ==== Triones BLE LED ====
 #define LED_MAC "53:02:02:00:04:BB"
-// NimBLE-Arduino 1.x (1.4.x): same API and timings as the old trianon_led_alexa
+// NimBLE-Arduino 1.4.3 (needs core 2.0.17): same API and timings as the old trianon_led_alexa
 // firmware, which connected reliably to this strip (2.x kept failing with error 574).
 #define BLE_CONNECT_ATTEMPTS 10
 #define BLE_CONNECT_TIMEOUT_S 5       // NimBLE 1.x: seconds (2.x takes ms)

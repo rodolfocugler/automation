@@ -57,4 +57,6 @@ pairing is needed, but the TV must be on and keep that IP (reserve it in the rou
 
 ## Libraries
 
+Run `./setup.sh` to install arduino-cli, the cores and every library at the right version.
+
 Same as sala/002 (IRremote **4.x** required: uses `sendNECMSB` / `sendSamsungMSB`).

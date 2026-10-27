@@ -91,10 +91,12 @@ sync (log stops at `BLE: starting`) and the whole board stops (no MQTT, no Wi-Fi
 
 ## Libraries
 
+Run `./setup.sh` to install arduino-cli, the core and every library below at the right version.
+
 - WiFiManager (tzapu) 2.x
 - PubSubClient 2.8
 - ArduinoJson 6 or 7
-- NimBLE-Arduino **1.4.x** (1.x API, as the old `trianon_led_alexa` firmware; 2.x kept failing with BLE error 574). Install with `arduino-cli lib install "NimBLE-Arduino@1.4.3"`
+- NimBLE-Arduino **1.4.3** only, needs core **2.0.17** (1.x API, as the old `trianon_led_alexa` firmware; 2.x kept failing with BLE error 574). Install with `arduino-cli lib install "NimBLE-Arduino@1.4.3"`
 
 ## First setup
 
